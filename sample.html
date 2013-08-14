@@ -1,0 +1,77 @@
+<html>
+<meta charset="utf-8">
+	<style>
+		body {
+		  font: 10px sans-serif;
+		}
+
+		.axis path,
+		.axis line {
+		  fill: none;
+		  stroke: #000;
+		  shape-rendering: crispEdges;
+		}
+
+
+		.graph {
+			width: 1280px;
+			display: block;
+			margin: 0 auto;
+			position: relative;
+		}
+
+		.line {shape-rendering: crispEdges; fill: none;}
+		.plot {
+			fill: none;
+			stroke-width: 1px;
+			shape-rendering: crispEdges;
+		}
+
+		/*#g0 .plot {stroke: steelblue;}
+
+		#g1 .plot {stroke: steelblue;}
+
+		#g2 .plot {stroke: red;}
+
+		#g3 .plot {stroke: red;}*/
+
+		.cursor {
+			fill: none;
+			stroke: black;
+			stroke-width: 1px;
+			opacity: 0.5;
+			shape-rendering: crispEdges;
+			z-index: 999;
+		}
+
+		.cpos {
+			display: block;
+			position: absolute;
+			text-align: right;
+			right: 20px;
+		}
+
+		.cpos .info {
+			font-size: 3em;
+			color: black;
+			vertical-align: top
+		}
+	</style>
+<body>
+	<script src="http://d3js.org/d3.v3.js"></script>
+	<script src="../graph2.js"></script>
+	<script>
+		var graph1 = new Graph({
+			dataSrc:'data.php',
+			dataNames: ['rand'],
+			dataDescs: ['Just some random data'],
+			w:1280,
+			h: 150,
+			startI: 100,
+			rounder: 1,
+			margins: {top: 20, right: 20, bottom: 30, left: 50},
+		});
+	</script>
+
+	<div id="g0"></div>
+</body>
