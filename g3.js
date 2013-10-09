@@ -11,10 +11,12 @@ E-mail: gji@umd.edu
 ---------------------------------------------------------------------
 */
 
-function Graph() {
-    // Static variables
-    if ( typeof Graph._index == 'undefined' ) Graph._index=0;
-    if ( typeof Graph._defaultColors == 'undefined' ) Graph._defaultColors = ["#4A6FE3","#11C638","#8E063B","#EF9708","#023FA5","#D33F6A","#0FCFC0","#F79CD4"]
+var g3 = function(){};
+
+g3._index = 0
+g3._defaultColors = ["#4A6FE3","#11C638","#8E063B","#EF9708","#023FA5","#D33F6A","#0FCFC0","#F79CD4"]
+
+g3.graph = function() {
 
     // Global variables (user-settable)
     this.dataSrc = ''; // Source of data. See php file for necessary getters.
@@ -28,21 +30,22 @@ function Graph() {
     this.updateInt = 1000;
     this.dataDescs = [];
     this.dataColors = [];
-    this.transitionSpeed = 200; // in ms
+    this.transitionSpeed = 500; // in ms
+    this.autoTrans = true;
 
     // Global variables. These are mostly for the ability to sync joined-graph pan/zoom levels
     this.zoomer;
     this.updater;
-    this.curGroup = [this]; // Set this with Graph.joinScale
-    this.gIndex = Graph._index;
+    this.curGroup = [this]; // Set this with g3.joinScale
+    this.gIndex = g3._index;
 
     // Update static variables
-    Graph._index++;
+    g3._index++;
 
     // Local variables
     var that = this; // Need this because JS is flakey with the "this" keyword. Always reference that, not this!
     for (var n in arguments[0]) { this[n] = arguments[0][n]; } // Get all user-set vars
-    for(var i=0; i<this.dataNames.length; i++) this.dataColors.push(Graph._defaultColors[(i+this.gIndex)%(Graph._defaultColors.length)]); // Throw on default colors
+    for(var i=0; i<this.dataNames.length; i++) this.dataColors.push(g3._defaultColors[(i+this.gIndex)%(g3._defaultColors.length)]); // Throw on default colors
 
     width = this.w - this.margins.left - this.margins.right;
     height = this.h - this.margins.top - this.margins.bottom;
@@ -58,21 +61,27 @@ function Graph() {
     var latestTime; // Last time updated (in UNIX time)
     var upping = false; // Semaphore for updating
     var minT; // Earliest time with data entry
+    var graphMotionSpeed;
     var bisect = d3.bisector(function(d) { return Math.round(d.time); }).left; // Bisector we will use multiple times
     var mD = false;
 
-    d3.json(this.dataSrc + "?last=" + this.startI, function(error, json){
+    this.plot = function() {
+    d3.json(this.dataSrc + "/last/" + this.startI, function(error, json){
         if(error) return console.warn(error);
         data = json;
-        minT = data[0].time;
-        latestTime = data[data.length-1].time;
-        that.plot();
+        minT = data[0].time * 1000;
+        latestTime = data[data.length-1].time * 1000;
+        that.setup();
+	if(that.autoTrans) {
+	    graphMotionSpeed = 1000*(data[1].time - data[0].time);
+	}
         that.updater = setInterval(that.update, that.updateInt);
     });
+    }
 
-    this.plot = function() {
+    this.setup = function() {
         // Set up axes
-        var xd = d3.extent(data, function(d) {return new Date(d.time);} );
+        var xd = d3.extent(data, function(d) {return new Date(1000*d.time);} ); 
         x = d3.time.scale().domain(xd).range([0,width]);
 
         var yd = d3.extent(data, function(d) {return (d[that.dataNames[0]]);} );
@@ -80,23 +89,27 @@ function Graph() {
         y = d3.scale.linear().domain([yd[0]-0.1*(yd[1]-yd[0]), yd[1]+0.1*(yd[1]-yd[0])]).range([height,0]);
 
         // Set up event listeners for zooming. The "true" causes the event listener to gain precedence over the built-in zoomer
-        d3.select("body #g"+that.gIndex).attr("class", "graph")
-        .on("mousedown", function(){ // Prevent updating when dragging the graph
-            mD = true;
-            clearInterval(that.updater);
+        var graphObj = d3.select("body #g"+that.gIndex)//.attr("class", "graph")
+        /*.on("mousedown", function(){ // Prevent updating when dragging the graph
+            //mD = true;
+            //clearInterval(that.updater);
             //that.setLiveUpdate(false);
-        }, true).on("mouseup", function(){ // Restart updating, but ensure live updates are killed (mouseout erroneously fires after mouseup...)
-            mD = false;
-            that.restartUps();
-            that.setLiveUpdate(false);
-        }, true).on("mousewheel", function(){ // Make sure we are updating synced graphs
+        }, true).on("mouseup", function(){ // Restart updating, but ensure live updates are killed 
+            //mD = false;
+            //that.restartUps();
+            //that.setLiveUpdate(false);
+        }, true)*/.on("mousewheel", function(){ // Make sure we are updating synced graphs
             that.moveEvent(this);
         }, false).on("mousemove", function(){ // Update the cursor
             that.moveEvent(this);
-        }, true).on("mouseout", function(){
-            that.setLiveUpdate(true); // This technically starts live updates, but we really do this to eliminate erratic mouseout events
-            window.setTimeout(that.outEvent, 100, this); // Check later to see if there has been further motion. If so, don't actually register a mouseout
-        }, true).append("div").attr("class", "cpos").style("left", null).style("right", width);
+        }, true)
+	
+	// special listener for mouseleave since mouseout fires whenever the dom element underneath the mouse changes, regardless if the cursor leaves!
+	$("body #g"+that.gIndex).mouseleave( function(outevent){
+            that.outEvent();
+        })
+	
+	graphObj.attr("class", "graph").append("div").attr("class", "cpos").style("left", null).style("right", width);
 
         // this is the zooming object
         that.zoomer = d3.behavior.zoom().x(x).on("zoom", that.zoom);
@@ -113,7 +126,7 @@ function Graph() {
         graph.append("defs").append("clipPath")
             .attr("id", "clip")
             .append("rect")
-            .attr("transform", "translate(1,0)")
+            //.attr("transform", "translate(1,0)")
             .attr("width", width)
             .attr("height", height);
 
@@ -132,7 +145,7 @@ function Graph() {
         // Line plot generator
         line = d3.svg.line()
             .interpolate("step-before")
-            .x(function(d) { return x(new Date(d.time)); })
+            .x(function(d) { return x(new Date(1000*d.time)); })
             .y(function(d) { return y(d[that.dataNames[0]]); });
 
         // Line plot wrapper
@@ -141,7 +154,7 @@ function Graph() {
             .attr("class", "plot")
 
         // Actual data
-        plot.append("path")
+        path = plot.append("path")
             .datum(data)
             .attr("stroke", that.dataColors[0])
             .attr("class", "line")
@@ -164,17 +177,19 @@ function Graph() {
             .attr("x2",width)
             .attr("y1",0)
             .attr("y2",height+that.margins['top']);
+
+	that.goToLast();
     }
 
     // Event listeners
-
+/*
     this.setLiveUpdate = function(lu) {
         objs = that.curGroup;
         for(var i=0; i<objs.length; i++) {
             objs[i].liveUp = lu;
         }
     }
-
+*/
     this.moveEvent = function() {
         objs = that.curGroup;
         for(var i=0; i<objs.length; i++) {
@@ -183,10 +198,10 @@ function Graph() {
             objs[i].liveUp = false;
             objs[i].updateCursor(false);
             objs[i].zoom();
-            objs[i].update();
+            objs[i].updatePlot();
         }
     }
-
+/*
     this.restartUps = function() {
         objs = that.curGroup;
         for(var i=0; i<objs.length; i++) {
@@ -194,18 +209,16 @@ function Graph() {
             objs[i].updater = window.setInterval(objs[i].update, objs[i].updateInt);
         }
     }
-
+*/
     this.outEvent = function() {
-        if(that.liveUp) { // Only fire if we're sure no other mouse activity has occured
-            objs = that.curGroup;
-            for(var i=0; i<objs.length; i++) {
-                clearInterval(objs[i].updater);
-                objs[i].updater = window.setInterval(objs[i].update, objs[i].updateInt); // Restart live updates
-                objs[i].zoom();
-                objs[i].update(); // Update immediately
-                objs[i].updateCursor(true);
-            }
-        }
+	objs = that.curGroup;
+	for(var i=0; i<objs.length; i++) {
+	    objs[i].liveUp = true;
+	    objs[i].goToLast();
+	    objs[i].zoom();
+	    objs[i].update(); // Update immediately
+	    objs[i].updateCursor(true);
+	}
     }
 
     this.updateCursor = function() { // If first argument is true, we are live updating otherwise go to mouse position
@@ -213,7 +226,8 @@ function Graph() {
             xp = width;
             dval = new Date(Math.round(latestTime));
             colored = "green";
-            cursor.attr("transition", null).transition().duration(that.transitionSpeed).attr("x1", xp).attr("x2", xp).style("stroke", colored);;
+            cursor.attr("transition", null).transition().duration(that.transitionSpeed).attr("x1", xp).attr("x2", xp).style("stroke", colored);
+	    var dataPt = data[data.length-1];
         } else {
             var xp = d3.mouse(graph[0][0])[0];
             if(xp < 1) xp = 1;
@@ -221,12 +235,12 @@ function Graph() {
             that.liveUp = false;
             dval = x.invert(xp);
             colored = "black";
-            cursor.attr("transition", null).attr("x1", xp).attr("x2", xp).style("stroke", colored);;
-        }
+            cursor.attr("transition", null).attr("x1", xp).attr("x2", xp).style("stroke", colored);
+	    var place = bisect(data,dval.getTime()/1000);
+	    var dataPt = data[place];
+	} 
         var timeStr = this.updateCursorDateHelper(dval);
-        var place = bisect(data,dval.getTime());
-        var dataPt = data[place];
-        var statusText = d3.select("#g"+that.gIndex+" .cpos");
+	var statusText = d3.select("#g"+that.gIndex+" .cpos");
         dataVal = ""
         if(dataPt != undefined && place != 0 ) {
             //var mult = Math.pow(10,this.rounder);
@@ -237,18 +251,21 @@ function Graph() {
             statusText.html(timeStr+"<br>");
         }
         if(arguments[0] == true) {
-            if(statusText.style("left") == "auto" && statusText.attr("transition") == "") {
-                statusText.attr("transition", null)
-                    .transition().duration(that.transitionSpeed)
-                    .style("right", (that.margins['right']+4)+"px");
-            } else {
-                statusText
-                    .style("right", width-(parseFloat(statusText.style("left").replace("px",""))-that.margins['right']+statusText[0][0].offsetWidth) + "px")
-                    .style("left", "auto")
-                    .transition().duration(that.transitionSpeed)
-                    .style("right", (that.margins['right']+4)+"px")
-                    .style("text-align", "right");
-            }
+	    if(statusText.style("right") != (that.margins['right']+4)+"px") { 
+		// fancy stuff to make text transition back
+		if(statusText.style("left") == "auto" && statusText.attr("transition") == "") {
+		    statusText.attr("transition", null)
+			.transition().duration(that.transitionSpeed)
+			.style("right", (that.margins['right']+4)+"px");
+		} else {
+		    statusText
+			.style("right", width-(parseFloat(statusText.style("left").replace("px",""))-that.margins['right']+statusText[0][0].offsetWidth) + "px")
+			.style("left", "auto")
+			.transition().duration(that.transitionSpeed)
+			.style("right", (that.margins['right']+4)+"px")
+			.style("text-align", "right");
+		}
+	    }
         } else {
             if(xp>width/2) { // switch sides if over halfway
                 statusText.style("left","auto").style("right", (width-xp+that.margins['right']+4)+"px").style("text-align", "right");
@@ -268,68 +285,87 @@ function Graph() {
 
     this.zoom = function() {
         xAxis.scale(x);
-        if(x.invert(0).getTime()<minT) {
-            minT = x.invert(0).getTime() - (latestTime - x.invert(0).getTime())*1;
+	minDispVal = x.invert(0).getTime();
+	screenLength = latestTime - minDispVal;
+        if(minDispVal<minT) {
+            minT = minDispVal - (screenLength)*1; // grab an extra screenlength for fluidity
             that.update(minT);
-        } else if(minT < (x.invert(0).getTime() - (latestTime - x.invert(0).getTime())) && data.length > 120) {
-            var bpos = bisect(data, x.invert(0).getTime() - (latestTime - x.invert(0).getTime())*0.5);
-            if(data.length-bpos < 101) bpos = data.length-101;
+        } else if(minT < (minDispVal - (screenLength)*2) && data.length > 120) { // if minT is way too big (at least two screenlengths)
+            var bpos = bisect(data, minDispVal - (screenLength)*1);
+            if(data.length-bpos < 101) bpos = data.length-101; // at least keep 100 points
             data.splice(0,bpos);
-            minT = data[0].time;
+            minT = data[0].time * 1000;
         }
-        graph.select(".x.axis").transition().duration(that.transitionSpeed).call(xAxis);
+	graph.select(".x.axis").transition().ease("linear").duration(graphMotionSpeed).call(xAxis);
         if(!mD) that.scaleY();
         that.updatePlot();
     }
 
     this.update = function() {
-        if(arguments.length>0) {
+        if(arguments.length>0) { // update called by zoom, so we may need old data
+	    liveUp = false;
             if(upping) { // Currently updating, set up listener to wait for new data
                 window.setTimeout(that.update, 500, arguments[0]);
                 return;
             }
             upping = true;
-            d3.json(that.dataSrc + "?st="+arguments[0], function(error, json){
-                if(error) return console.warn(error);
-                latestTime = json[json.length-1].time;
-                data = json;
-                if(json.indexOf(data[data.length-1]) == -1) console.log("oh noes");
-                that.scaleY()
-                if(that.liveUp) { that.goToLast(); }
-                that.updatePlot();
-                upping = false;
-            });
+            d3.json(that.dataSrc + "/time/after/"+(arguments[0]/1000).toString(), function(error,json){updateCallback(error, json, true);});
         } else {
             if(!upping) {
                 upping = true;
-                d3.json(that.dataSrc + "?st="+latestTime, function(error, json){
-                    if(error) return console.warn(error);
-                    if(json.length>0) {
-                        latestTime = json[json.length-1].time;
-                        data = data.concat(json);
-                        data.splice(0,json.length-1);
-                        that.scaleY()
-                        if(that.liveUp) { that.goToLast(); }
-                        that.updatePlot();
-                    } else if(that.liveUp) { that.goToLast(); }
-                    upping = false;
-                });
+                d3.json(that.dataSrc + "/time/after/"+(latestTime/1000).toString(), function(error,json){updateCallback(error, json, false);});
             }
         }
     }
 
+    updateCallback = function(error, json, zoom){
+	if(error) return console.warn(error);
+	if(!(json.length > 0)) {
+	    upping = false;
+	    return;
+	}
+	latestTime = 1000*json[json.length-1].time;
+	if(zoom) data = json;
+	else {
+	    data = data.concat(json);
+	    data.splice(0,json.length-1);
+	}
+	that.scaleY();
+	if(that.liveUp) that.goToLast();
+	that.updatePlot();
+	upping = false;
+    };
+
     this.goToLast = function() {
-        var past = (x(latestTime)-that.zoomer.translate()[0]-that.zoomer.scale()*width)/that.zoomer.scale();
+	var oldPos = that.zoomer.translate()[0];
+        var past = (x(latestTime)-that.zoomer.translate()[0]-that.zoomer.scale()*width)/that.zoomer.scale(); // Javascript date constructor is standard unix time but in ms...??
         var oldTrans = -(that.zoomer.scale()*(width)) + width;
-        that.zoomer.translate([-past+oldTrans-past*(that.zoomer.scale()-1),0]);
-        that.updateCursor(true);
+	var newPos = -past+oldTrans-past*(that.zoomer.scale()-1);
+	that.zoomer.translate([newPos,0]);
+	console.log("setting up transition!");
+	path.attr("transform", null).attr("transform", "translate("+(oldPos - newPos).toString() + ",0)");
+	if(graphMotionSpeed != 0) {
+	    path.transition().ease("linear").duration(graphMotionSpeed*0.99).attr("transform", "translate(0,0)").each("end", calcTrans);
+	    graphMotionSpeed = 0;
+	} else {
+	    graphMotionSpeed = 0;
+	}
         that.zoom();
+        that.updateCursor(true);
+    }
+
+    calcTrans = function() {
+	if(graphMotionSpeed == 0) { // if it is 0, we have not yet tried to run another transition, so we can set it up.
+	    graphMotionSpeed = 1000*(data[1].time - data[0].time);
+	    path.transition().ease("linear").duration(graphMotionSpeed).attr("transform", "translate(0,0)").each("end", calcTrans);
+	    graphMotionSpeed = 0;
+	} else {
+	}
     }
 
     this.scaleY = function() {
-        var bisect = d3.bisector(function(d) { return Math.round(d.time); }).left;
+        var bisect = d3.bisector(function(d) { return Math.round(1000*d.time); }).left; // Javascript date constructor is standard unix time but in ms...??
         var place = bisect(data,x.invert(0).getTime());
-
         var yd = d3.extent(data.slice(place, data.length), function(d) {return (d[that.dataNames[0]]);} );
         if(yd[0] == yd[1]) {yd[0] = yd[0]*.9; yd[1] = yd[1]*1.1;}
         y.domain([yd[0]-0.1*(yd[1]-yd[0]), yd[1]+0.1*(yd[1]-yd[0])]).range([height,0]);
@@ -339,14 +375,11 @@ function Graph() {
 
     this.updatePlot = function() {
         d3.select("#g"+that.gIndex).select(".plot .line").datum(data);
-        d3.select("#g"+that.gIndex).select(".plot .line")
-            //.transition().duration(that.transitionSpeed)
-            .attr("d", line);
-            //.attr("transform", "translate("+that.zoomer.translate()[0]+",0)");
+        d3.select("#g"+that.gIndex).select(".plot .line").attr("d", line);
     }
 }
 
-Graph.joinScale = function() {
+g3.joinScale = function() {
     for(var i=0; i<arguments.length; i++) {
         arguments[i].curGroup = arguments;
         arguments[i].dataColors = arguments[0].dataColors;

@@ -22,21 +22,13 @@
 
 		.line {shape-rendering: crispEdges; fill: none;}
 		.plot {
-			fill: none;
+			fill: blue;
+			fill-opacity: 50%;
 			stroke-width: 1px;
 			shape-rendering: crispEdges;
 		}
 
-		/*#g0 .plot {stroke: steelblue;}
-
-		#g1 .plot {stroke: steelblue;}
-
-		#g2 .plot {stroke: red;}
-
-		#g3 .plot {stroke: red;}*/
-
 		.cursor {
-			fill: none;
 			stroke: black;
 			stroke-width: 1px;
 			opacity: 0.5;
@@ -59,18 +51,21 @@
 	</style>
 <body>
 	<script src="http://d3js.org/d3.v3.js"></script>
-	<script src="../graph2.js"></script>
+	<script src="http://code.jquery.com/jquery-1.10.2.min.js"></script>
+	<script src="/javascripts/g3.js"></script>
 	<script>
-		var graph1 = new Graph({
-			dataSrc:'data.php',
-			dataNames: ['rand'],
+		var graph1 = new g3.graph({
+			dataSrc:'data',
+			dataNames: ['data'],
 			dataDescs: ['Just some random data'],
 			w:1280,
-			h: 150,
+			h: 350,
 			startI: 100,
-			rounder: 1,
+			rounder: 4,
 			margins: {top: 20, right: 20, bottom: 30, left: 50},
 		});
+
+		graph1.plot();
 	</script>
 
 	<div id="g0"></div>
